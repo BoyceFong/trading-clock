@@ -1,0 +1,7 @@
+/* Menu strings — English */
+"menu.title" = "Trading Clock";
+"menu.toggleWindow" = "Show/Hide Clock";
+"menu.hideWindow" = "Hide Window";
+"menu.launchAtLogin" = "Launch at Login";
+"menu.hotkey" = "Hotkey";
+"menu.quit" = "Quit";

@@ -1,0 +1,7 @@
+/* 菜单文案 — 简体中文 */
+"menu.title" = "交易时钟";
+"menu.toggleWindow" = "显示/隐藏时钟";
+"menu.hideWindow" = "隐藏窗口";
+"menu.launchAtLogin" = "开机时启动";
+"menu.hotkey" = "快捷键";
+"menu.quit" = "退出";
