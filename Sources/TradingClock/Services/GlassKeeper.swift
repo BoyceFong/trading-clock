@@ -17,25 +17,43 @@ import ObjectiveC
 ///    *looks* identical to frost. Moving the window across screens "fixes"
 ///    it because that path force-rebuilds the material + capture.
 ///
-/// The invariant is therefore two-part: *fog valves pinned shut* and
-/// *backdrop sampling fresh*. This type enforces both:
+/// The invariant is therefore two-part: *no fog trigger* and *backdrop
+/// sampling fresh*. This type enforces both:
 ///
-/// - `install()` swizzles ONLY the fog setters to always write 0. The
-///   `-_windowChangedKeyState` brain is deliberately left intact — it is also
-///   the system's "re-evaluate and re-register" entry point, and killing it
-///   (v1 of this file) removed the self-heal along with the fog.
-/// - `assertFresh(_:)` re-asserts the invariant at every edge that can break
-///   it (launch, un-hide, screen change, wake, key transitions): direct ivar
-///   clamp (covers internal direct writes that bypass setters) + style reset
-///   (a material teardown/rebuild — the same rebuild that cross-screen drag
-///   provokes) + a delayed second pass for the async capture registration.
+/// - `install()` kills the `-_windowChangedKeyState` fog trigger outright and
+///   pins the fog setters to 0. (v2 tried to keep the trigger alive and clamp
+///   only the setters — it frosted on every resign-key again: the trigger's
+///   fog reaches the renderer through internal direct writes the clamps do
+///   not intercept. The trigger has no sampling duty worth keeping; see below.)
+/// - `assertFresh(_:)` re-asserts sampling freshness at the edges that break
+///   it — launch, un-hide, screen change, wake — and **only** those. Key
+///   transitions are deliberately NOT edges here (v2 regression: rebuilding
+///   the material while unfocused re-initializes it straight into the fogged
+///   treatment). The material teardown/rebuild is the deliberate equivalent
+///   of "drag to another screen and back", plus a delayed second pass for
+///   the async capture registration.
 enum GlassKeeper {
-    // MARK: Install (fog valves pinned shut)
+    // MARK: Install (fog trigger dead, fog valves pinned shut)
 
     static func install() {
+        // The key-state brain is the FOG TRIGGER: on resign-key it pushes the
+        // subdued treatment (via direct internal writes the setter clamps may
+        // not intercept — v2 proved this by regression). Kill it. Sampling
+        // re-registration does NOT depend on it: the cross-screen-drag cure is
+        // the material teardown/rebuild in `apply(_:)`, which we invoke
+        // ourselves at the sampling edges.
+        neutralizeNoArg("_windowChangedKeyState")
+        // Belt and suspenders: pin the fog setters too.
         clampSetter("set_subduedState:", ivar: "_subduedState")
         clampSetter("set_scrimState:", ivar: "_scrimState")
         // `set_interactionState:` is hover behaviour, not fog — untouched.
+    }
+
+    private static func neutralizeNoArg(_ selName: String) {
+        let sel = NSSelectorFromString(selName)
+        guard let method = class_getInstanceMethod(NSGlassEffectView.self, sel) else { return }
+        let imp = imp_implementationWithBlock({ (_: AnyObject) in } as @convention(block) (AnyObject) -> Void)
+        method_setImplementation(method, imp)
     }
 
     private static func clampSetter(_ selName: String, ivar: String) {

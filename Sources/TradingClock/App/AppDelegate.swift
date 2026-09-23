@@ -126,8 +126,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Glass invariant edges
 
-    /// Every edge that can desync backdrop sampling: screen change (the
-    /// "drag to another screen and back" fix), wake, and key transitions.
+    /// Sampling-desync edges only — launch and un-hide are wired at their call
+    /// sites. Key transitions are deliberately NOT here: rebuilding the glass
+    /// material while unfocused re-frosts it (v2 regression).
     private func observeGlassEdges() {
         let center = NotificationCenter.default
         let wsCenter = NSWorkspace.shared.notificationCenter
@@ -138,8 +139,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         center.addObserver(forName: NSWindow.didChangeScreenNotification, object: panel, queue: .main, using: assert)
-        center.addObserver(forName: NSWindow.didBecomeKeyNotification, object: panel, queue: .main, using: assert)
-        center.addObserver(forName: NSWindow.didResignKeyNotification, object: panel, queue: .main, using: assert)
         wsCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: assert)
     }
 

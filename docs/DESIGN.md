@@ -90,10 +90,12 @@ f(t) = wash + peak·e^(−t/λ) + slope·max(0, 1 − t/H)
 1. **Subdued 处理态**——失焦时系统经 `-_windowChangedKeyState` → `-set_subduedState:` / `-set_scrimState:`（Int64 ivar）推入磨砂。启动/换屏/重现时不推回，就停在磨砂。
 2. **Backdrop 采样失效**——玻璃靠 WindowServer 侧对「窗后内容」的采样渲染。采样注册是异步的（启动竞态），窗口 `orderOut` 期间被拆除（久藏→快捷键重现即中招）。**采不到内容时的无采样后备态看起来与磨砂无异**。「拖到别的屏幕再拖回来」能治好，因为换屏强制重建材质+采样——这就是 v2 之前唯一的自愈路径。
 
-**方案（不变量：雾阀常闭 + 采样常鲜）**：
+**方案（不变量：起雾触发器钉死 + 采样常鲜）**：
 
-- **只钳阀门，保大脑**：`GlassKeeper.install()` 把 `set_subduedState:` / `set_scrimState:` 的 IMP 换成恒写 0；**故意不碰 `-_windowChangedKeyState`**——它同时是系统「重估材质、重建采样」的入口。v1（GlassFrostGuard）把三者全 no-op 是错的：雾是没了，自愈能力也没了，于是启动/重现后只剩「拖换屏」一条备路能救。
-- **`assertFresh(_:)` 在每个会破坏不变量的边缘主动断言**：启动、隐藏→重现（`orderFrontRegardless` 不经 key 迁移）、换屏、唤醒、进出焦点。动作 = 直写 ivar 钳 0（覆盖绕过 setter 的内部直写）+ style 重置（setter 会 teardown/rebuild 材质并重注册采样，即「拖换屏」的等价物；style setter 会重置 cornerRadius，须重设）+ 350ms 后二次断言（覆盖异步采样注册）。
+- **钉死触发器 + 钳死阀门**：`GlassKeeper.install()` 把 `-_windowChangedKeyState` no-op 掉，并把 `set_subduedState:` / `set_scrimState:` 的 IMP 换成恒写 0。**教训（v2 回归）**：曾尝试「保大脑、只钳阀门」（以为大脑还负责重建采样）——结果失焦立刻起雾：触发器的起雾通过 setter 拦不住的内部直写直达渲染器。真相是**采样重建根本不需要它**——「拖换屏」起效的等价物是材质 teardown/rebuild，即 `assertFresh` 里 style 重置所做的事。
+- **`assertFresh(_:)` 只挂在破坏采样的边缘**：启动、隐藏→重现（`orderFrontRegardless` 不经 key 迁移）、换屏、唤醒。动作 = 直写 ivar 钳 0 + style 重置（setter 会 teardown/rebuild 材质并重注册采样，即「拖换屏」的等价物；style setter 会重置 cornerRadius，须重设）+ 350ms 后二次断言（覆盖异步采样注册）。**焦点进出故意不挂**（v2 回归：失焦当下 rebuild 材质会把材质直接初始化进起雾态）。
+
+**版本脉络**：v1 全 no-op（失焦好、启动/久藏重现仍磨砂）→ v2 保大脑+焦点断言（**失焦回归**，且证实起雾是内部直写）→ v3 钉死大脑 + 采样断言只挂非焦点边缘。
 
 **验证**：探针实测钳位写入有效；重启、久藏重现、换屏、失焦各场景实机对比。
 
