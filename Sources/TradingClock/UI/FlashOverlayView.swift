@@ -12,10 +12,28 @@ struct FlashOverlayView: View {
     /// Bump once per pulse; retriggers the keyframed flash.
     let pulseToken: Int
     let windowSize: CGSize
+    /// Dev-only fixed strength for `--ui-preview` renders; nil = live pulses.
+    var previewStrength: CGFloat? = nil
 
     @State private var mask: NSImage?
 
+    @Environment(\.staticPreview) private var staticPreview
+
     var body: some View {
+        if staticPreview {
+            // Settled preview render: fixed strength, no animator (the
+            // display link does not exist offscreen).
+            shape(opacity: previewStrength ?? 1)
+                .task(id: windowSize) {
+                    let scale = max(NSScreen.main?.backingScaleFactor ?? 2, 2)
+                    mask = EdgeGlowMask.image(size: windowSize, scale: scale)
+                }
+        } else {
+            animatedBody
+        }
+    }
+
+    private var animatedBody: some View {
         KeyframeAnimator(initialValue: CGFloat(0), trigger: pulseToken) { strength in
             shape(opacity: strength)
         } keyframes: { _ in

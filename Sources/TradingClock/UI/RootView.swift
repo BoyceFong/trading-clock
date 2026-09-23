@@ -7,6 +7,10 @@ struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.colorScheme) private var colorScheme
 
+    /// Dev-only: force the alert overlay to a fixed strength for `--ui-preview`
+    /// renders (the live overlay animates via pulse triggers).
+    var previewAlertStrength: CGFloat? = nil
+
     var body: some View {
         GeometryReader { geo in
             ZStack {
@@ -19,7 +23,7 @@ struct RootView: View {
                     .scaleEffect(scale(in: geo.size), anchor: .center)
 
                 FlashOverlayView(alert: model.alert, pulseToken: model.pulseToken,
-                                 windowSize: geo.size)
+                                 windowSize: geo.size, previewStrength: previewAlertStrength)
 
                 rimRing
             }

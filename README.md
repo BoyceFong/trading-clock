@@ -16,6 +16,9 @@
 ╰────────────────────────────────────╯
 ```
 
+![TradingClock 悬浮在 K 线图上，收盘前 3 秒红色警示](docs/images/app-screenshot.png)
+*收盘前 3 秒的红色警示状态（由真实 UI 组件离屏渲染）：翻页时钟 + 倒计时 + 整圈警示环，背后 K 线透过玻璃可见。*
+
 ## 目录
 
 - [快速开始 (Quickstart)](#快速开始-quickstart)
@@ -102,6 +105,7 @@ TC_CANDLE_LEN_SECONDS=30 /Applications/TradingClock.app/Contents/MacOS/TradingCl
 | `TC_FLIP_SLOW=1` | 翻页放慢 10 倍，观察机械动作 |
 | `TC_GLASS_MODE=material\|solid` | 玻璃降级调试图形 |
 | `--glow-preview [目录]` | 渲染光晕均匀性验证图并退出 |
+| `--ui-preview [目录]` | 离屏渲染应用 UI 截图（README 用图即出自它） |
 
 ## 边界与 FAQ (Boundaries & FAQ)
 

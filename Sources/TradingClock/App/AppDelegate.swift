@@ -12,11 +12,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController: StatusItemController!
 
     private var transparencyObserver: AnyCancellable?
+    private var glassView: NSGlassEffectView?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Keep Liquid Glass at its focused, fully-transparent treatment even
-        // when the window is not key (kills the system's unfocus frost).
-        GlassFrostGuard.install()
+        // Pin the glass fog valves shut (see GlassKeeper for the two frost
+        // mechanisms and why the key-state brain is left intact).
+        GlassKeeper.install()
 
         // Glass mode: env override → Reduce Transparency forces solid.
         var glassMode: GlassMode = switch ProcessInfo.processInfo.environment["TC_GLASS_MODE"] {
@@ -50,6 +51,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.setLaunchAtLogin(LoginItemService.isEnabled())
 
         observeReduceTransparency()
+        observeGlassEdges()
+        // Launch edge: WindowServer backdrop capture registers asynchronously.
+        if let glassView {
+            GlassKeeper.assertFresh(glassView)
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -87,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             glass.autoresizingMask = [.width, .height]
             glass.contentView = hosting
             container.addSubview(glass)
+            glassView = glass
 
         case .material:
             let effect = NSVisualEffectView(frame: container.bounds)
@@ -115,6 +122,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.setWindowVisible(true)
 
         self.panel = panel
+    }
+
+    // MARK: Glass invariant edges
+
+    /// Every edge that can desync backdrop sampling: screen change (the
+    /// "drag to another screen and back" fix), wake, and key transitions.
+    private func observeGlassEdges() {
+        let center = NotificationCenter.default
+        let wsCenter = NSWorkspace.shared.notificationCenter
+        let assert: @Sendable (Notification) -> Void = { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let glassView = self?.glassView else { return }
+                GlassKeeper.assertFresh(glassView)
+            }
+        }
+        center.addObserver(forName: NSWindow.didChangeScreenNotification, object: panel, queue: .main, using: assert)
+        center.addObserver(forName: NSWindow.didBecomeKeyNotification, object: panel, queue: .main, using: assert)
+        center.addObserver(forName: NSWindow.didResignKeyNotification, object: panel, queue: .main, using: assert)
+        wsCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: assert)
     }
 
     // MARK: Actions
@@ -149,6 +175,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if visible {
             panel.orderFrontRegardless()
             panel.invalidateCardShadow()
+            // Un-hide edge: orderOut tore down backdrop capture; a hotkey
+            // show does not pass through key transitions, so assert here.
+            if let glassView {
+                GlassKeeper.assertFresh(glassView)
+            }
         } else {
             panel.orderOut(nil)
         }

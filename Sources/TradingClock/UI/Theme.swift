@@ -1,5 +1,19 @@
 import SwiftUI
 
+/// Dev-only: `--ui-preview` renders outside the display link, where
+/// time-driven animators (KeyframeAnimator) can never resolve. Views read
+/// this and emit their settled static state instead.
+private struct StaticPreviewKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var staticPreview: Bool {
+        get { self[StaticPreviewKey.self] }
+        set { self[StaticPreviewKey.self] = newValue }
+    }
+}
+
 /// Shared metrics and the Solari flip-card palette.
 enum Theme {
     /// Window corner radius (Liquid Glass card + 凝光 ring).

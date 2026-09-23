@@ -28,6 +28,8 @@ struct FlipDigitView: View {
     /// still paints the previous digit — the reset is invisible.
     @State private var trigger = 0
 
+    @Environment(\.staticPreview) private var staticPreview
+
     init(value: Character, size: CGSize = Theme.digitSize) {
         self.value = value
         self.size = size
@@ -36,6 +38,16 @@ struct FlipDigitView: View {
     }
 
     var body: some View {
+        if staticPreview {
+            // Settled state for offscreen render: no flap in the air.
+            card(from: value, to: value, tau: 0)
+                .frame(width: size.width, height: size.height)
+        } else {
+            animatedBody
+        }
+    }
+
+    private var animatedBody: some View {
         KeyframeAnimator(initialValue: FlipPhase(), trigger: trigger) { phase in
             card(from: from, to: to, tau: phase.tau)
         } keyframes: { _ in

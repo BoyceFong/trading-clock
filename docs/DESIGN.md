@@ -81,15 +81,23 @@ f(t) = wash + peak·e^(−t/λ) + slope·max(0, 1 − t/H)
 
 **验证**（`--glow-preview`，复用生产代码路径）：上/下/左/右/两角同距（10pt）采样 α 偏差 ≤1/255（`UNIFORMITY: PASS`）；黑/白四象限对照图见 README。
 
-### 5. Liquid Glass 与 GlassFrostGuard
+### 5. Liquid Glass 恒定透明（GlassKeeper）
 
-**材质**：AppKit `NSGlassEffectView`（`style = .clear`，`cornerRadius = 26`），内容按 WWDC25-310 要求经 `contentView` 嵌入（勿把玻璃当 sibling 垫底）。系统「降低透明度」自动降级不透明（`TC_GLASS_MODE` 可强制 material/solid 调试）。
+**材质**：AppKit `NSGlassEffectView`（`style = .clear`，`cornerRadius = 26`），内容按 WWDC25-310 要求经 `contentView` 嵌入。系统「降低透明度」自动降级（`TC_GLASS_MODE` 可强制 material/solid 调试）。
 
-**失焦磨砂问题**：运行时探测确认 `NSGlassEffectView` 内部走 `-_windowChangedKeyState` → `-_subduedState` / `-_scrimState` 私有链路，窗口失焦即自动起雾；macOS 26 **无公开开关**（`effectIsInteractive` 是 27 的 API）。
+**磨砂有两种独立机制**（运行时探针 + 现象交叉确认）：
 
-**方案**：`GlassFrostGuard` 在启动时用 `method_setImplementation` 把这三个钩子替换为 no-op，玻璃恒定保持聚焦时的全透明处理。
+1. **Subdued 处理态**——失焦时系统经 `-_windowChangedKeyState` → `-set_subduedState:` / `-set_scrimState:`（Int64 ivar）推入磨砂。启动/换屏/重现时不推回，就停在磨砂。
+2. **Backdrop 采样失效**——玻璃靠 WindowServer 侧对「窗后内容」的采样渲染。采样注册是异步的（启动竞态），窗口 `orderOut` 期间被拆除（久藏→快捷键重现即中招）。**采不到内容时的无采样后备态看起来与磨砂无异**。「拖到别的屏幕再拖回来」能治好，因为换屏强制重建材质+采样——这就是 v2 之前唯一的自愈路径。
 
-**⚠️ 风险记录**：这是私有 API 钩子，未来 OS 更新可能改名或移除（届时该 hack 失效、失焦恢复起雾，但不影响其余功能）。缓解：只在运行时确认 selector 存在时才替换，找不到即静默跳过。
+**方案（不变量：雾阀常闭 + 采样常鲜）**：
+
+- **只钳阀门，保大脑**：`GlassKeeper.install()` 把 `set_subduedState:` / `set_scrimState:` 的 IMP 换成恒写 0；**故意不碰 `-_windowChangedKeyState`**——它同时是系统「重估材质、重建采样」的入口。v1（GlassFrostGuard）把三者全 no-op 是错的：雾是没了，自愈能力也没了，于是启动/重现后只剩「拖换屏」一条备路能救。
+- **`assertFresh(_:)` 在每个会破坏不变量的边缘主动断言**：启动、隐藏→重现（`orderFrontRegardless` 不经 key 迁移）、换屏、唤醒、进出焦点。动作 = 直写 ivar 钳 0（覆盖绕过 setter 的内部直写）+ style 重置（setter 会 teardown/rebuild 材质并重注册采样，即「拖换屏」的等价物；style setter 会重置 cornerRadius，须重设）+ 350ms 后二次断言（覆盖异步采样注册）。
+
+**验证**：探针实测钳位写入有效；重启、久藏重现、换屏、失焦各场景实机对比。
+
+**⚠️ 风险记录**：`set_*State:` / ivar 布局 / style 重建语义均为私有行为，OS 更新可能变化。缓解：全部 `responds`/ivar 探测存在才操作，失败静默跳过；最坏情况回到「失焦起雾」，不影响其余功能。
 
 ### 6. 窗口 ClockPanel
 
@@ -122,6 +130,7 @@ Swift 6 并发注意：C 回调捕获任何非 Sendable 值都会报错。解法
 | 闪光节奏 | `TC_CANDLE_LEN_SECONDS=30` 实机演练 | 黄×3 / 红×5 |
 | 时间对齐 | 与菜单栏时钟逐秒对照、睡眠唤醒后校准 | 分秒不差 |
 | 失焦玻璃 | 实机点击他处对比 | 全透明不变 |
+| 重启/久藏重现玻璃 | 重启、隐藏 30 分钟后快捷键调出 | 全透明（不再需拖换屏恢复） |
 
 ## 参考
 
